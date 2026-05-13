@@ -1,6 +1,9 @@
 import cv2
 import streamlit as st
 import tempfile
+from ultralytics import YOLO
+
+model = YOLO("yolov8m.pt")
 
 st.title("Smart Waste Segregation System")
 st.write("AI-powered waste detection using YOLOv8")
@@ -19,8 +22,11 @@ if uploaded_video is not None:
         ret, frame = cap.read()
         if not ret:
             break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_placeholder.image(frame, channels="RGB", use_container_width=True)
+
+        results = model.track(frame, persist=True, verbose=False, conf=0.3)
+        annotated_frame = results[0].plot()
+        annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+        frame_placeholder.image(annotated_frame, channels="RGB", use_container_width=True)
 
     cap.release()
     st.success("Video Processing Completed!")
