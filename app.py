@@ -1,7 +1,10 @@
 import cv2
 import streamlit as st
-import tempfile
+import pandas as pd
 from ultralytics import YOLO
+from collections import Counter
+import tempfile
+import time
 
 model = YOLO("yolov8m.pt")
 
@@ -26,8 +29,6 @@ waste_classes = {
 }
 
 st.title("Smart Waste Segregation System")
-st.write("AI-powered waste detection using YOLOv8")
-
 uploaded_video = st.file_uploader("Upload Waste Video", type=["mp4", "avi", "mov"])
 
 if uploaded_video is not None:
@@ -37,6 +38,9 @@ if uploaded_video is not None:
 
     cap = cv2.VideoCapture(temp_video.name)
     frame_placeholder = st.empty()
+    stats_placeholder = st.empty()
+    counted_ids = {}
+    total_counts = Counter()
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -48,17 +52,30 @@ if uploaded_video is not None:
         detected_types = []
 
         if results[0].boxes is not None:
-            for cls in results[0].boxes.cls:
+            boxes = results[0].boxes
+            for i, cls in enumerate(boxes.cls):
                 class_name = model.names[int(cls)]
-                if class_name in waste_classes:
-                    waste_type = waste_classes[class_name]
-                    detected_types.append(waste_type)
+                if class_name not in waste_classes:
+                    continue
+                waste_type = waste_classes[class_name]
+                detected_types.append(waste_type)
+                if boxes.id is not None:
+                    track_id = int(boxes.id[i])
+                    if track_id not in counted_ids:
+                        counted_ids[track_id] = waste_type
+                        total_counts[waste_type] += 1
 
         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
         frame_placeholder.image(annotated_frame, channels="RGB", use_container_width=True)
 
-        if detected_types:
-            st.write(f"Detected: {set(detected_types)}")
+        stats_df = pd.DataFrame(total_counts.items(), columns=["Waste Type", "Count"])
+        with stats_placeholder.container():
+            st.write("### Live Statistics")
+            st.metric("Total Unique Objects", sum(total_counts.values()))
+            if not stats_df.empty:
+                st.dataframe(stats_df, use_container_width=True)
+
+        time.sleep(0.03)
 
     cap.release()
     st.success("Video Processing Completed!")
