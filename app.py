@@ -28,6 +28,15 @@ waste_classes = {
     "spoon": "Metal"
 }
 
+COLORS = {
+    "Plastic": (255, 165, 0),
+    "Glass": (0, 255, 255),
+    "Organic": (0, 200, 0),
+    "E-Waste": (255, 0, 0),
+    "Paper": (255, 255, 0),
+    "Metal": (180, 180, 180)
+}
+
 st.title("Smart Waste Segregation System")
 uploaded_video = st.file_uploader("Upload Waste Video", type=["mp4", "avi", "mov"])
 
@@ -48,7 +57,7 @@ if uploaded_video is not None:
             break
 
         results = model.track(frame, persist=True, verbose=False, conf=0.3)
-        annotated_frame = results[0].plot()
+        annotated_frame = frame.copy()
         detected_types = []
 
         if results[0].boxes is not None:
@@ -59,6 +68,11 @@ if uploaded_video is not None:
                     continue
                 waste_type = waste_classes[class_name]
                 detected_types.append(waste_type)
+                x1, y1, x2, y2 = map(int, boxes.xyxy[i])
+                color = COLORS.get(waste_type, (255, 255, 255))
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(annotated_frame, waste_type, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 if boxes.id is not None:
                     track_id = int(boxes.id[i])
                     if track_id not in counted_ids:
@@ -67,16 +81,34 @@ if uploaded_video is not None:
 
         contamination = "Organic" in detected_types and "Plastic" in detected_types
 
+        recommendation = "No Waste Detected"
+        if detected_types:
+            if "Plastic" in detected_types or "Glass" in detected_types or "Metal" in detected_types:
+                recommendation = "Recyclable Waste"
+            if "Paper" in detected_types:
+                recommendation = "Dry Waste"
+            if "Organic" in detected_types:
+                recommendation = "Biodegradable Waste"
+            if "E-Waste" in detected_types:
+                recommendation = "Hazardous / E-Waste"
+
+        cv2.putText(annotated_frame, f"Bin: {recommendation}", (20, 40),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
         if contamination:
-            cv2.putText(annotated_frame, "CONTAMINATION DETECTED!", (20, 50),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+            cv2.putText(annotated_frame, "CONTAMINATION DETECTED!", (20, 80),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
 
         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
         frame_placeholder.image(annotated_frame, channels="RGB", use_container_width=True)
 
+        stats_df = pd.DataFrame(total_counts.items(), columns=["Waste Type", "Count"])
         with stats_placeholder.container():
             st.write("### Live Statistics")
             st.metric("Total Unique Objects", sum(total_counts.values()))
+            st.metric("Bin Recommendation", recommendation)
+            if not stats_df.empty:
+                st.dataframe(stats_df, use_container_width=True)
             if contamination:
                 st.error("Contamination! Organic and Plastic mixed!")
             else:
