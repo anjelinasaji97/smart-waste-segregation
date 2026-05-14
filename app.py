@@ -65,15 +65,22 @@ if uploaded_video is not None:
                         counted_ids[track_id] = waste_type
                         total_counts[waste_type] += 1
 
+        contamination = "Organic" in detected_types and "Plastic" in detected_types
+
+        if contamination:
+            cv2.putText(annotated_frame, "CONTAMINATION DETECTED!", (20, 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+
         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
         frame_placeholder.image(annotated_frame, channels="RGB", use_container_width=True)
 
-        stats_df = pd.DataFrame(total_counts.items(), columns=["Waste Type", "Count"])
         with stats_placeholder.container():
             st.write("### Live Statistics")
             st.metric("Total Unique Objects", sum(total_counts.values()))
-            if not stats_df.empty:
-                st.dataframe(stats_df, use_container_width=True)
+            if contamination:
+                st.error("Contamination! Organic and Plastic mixed!")
+            else:
+                st.success("No contamination detected")
 
         time.sleep(0.03)
 
